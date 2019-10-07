@@ -1,139 +1,101 @@
-# Discovering Neural Wirings (dnw) Micro-Net Submission
+# Micro-Net-DNW
 
-We use a method for "discovering neural wirings".
-We relax the typical notion of layers and instead enable channels
-to form connections independent of each other.
-This allows for a much larger space of possible networks.
-The wiring of our network is not fixed during training --
-as we learn the network parameters we also learn the structure itself.
+In this submission to the Micro-Net challenge we train a sparse version of ResNet50 v1.5.
+The method for sparsifying the ResNet 50 v1.5 appears in our paper on
+[Discovering Neural Wirings](https://arxiv.org/abs/1906.00586) to appear at NeurIPS 2019.
 
-We also invite you to check out our preprint [here](https://arxiv.org/pdf/1906.00586.pdf) for more information.
+We train a ResNet50 v1.5 which has only 10% of the total weights remaining. As standard, the first layer, batchnorm layers, and biases are left dense.
 
-## Set Up
-0. Clone this repository.
-1. Using `python 3.6`, create a `venv` with  `python -m venv venv` and run `source venv/bin/activate`.
-2. Install requirements with `pip install -r requirements.txt`.
-3. Create a **data directory** `<data-dir>`.
-If you wish to run ImageNet experiments there must be a folder `<data-dir>/imagenet`
-that contains the ImageNet `train` and `val`.
+This repo, however, is based on a standard repo by NVIDIA for training ResNet50 v1.5, which may be found [here](https://github.com/NVIDIA/DeepLearningExamples/tree/master/PyTorch/Classification/RN50v1.5).
+We begin by providing some preliminary information from their README.
 
+# 1. Perliminary Information from the NVIDIA repository.
+## Requirements
 
-## ImageNet Experiments and Pretrained Models
+Ensure you meet the following requirements:
 
-The experiment files for the ImageNet experiments in the paper may be found in `apps/large_scale`.
-To train your own model you may run
-```bash
-python runner.py app:apps/large_scale/<experiment-file> --gpus 0 1 2 3 --data-dir <data-dir>
+* [NVIDIA Docker](https://github.com/NVIDIA/nvidia-docker)
+* [PyTorch 19.06-py3 NGC container](https://ngc.nvidia.com/registry/nvidia-pytorch) or newer
+
+## Data Augmentation
+
+This model uses the following standard data augmentation:
+
+* For training:
+  * Normalization
+  * Random resized crop to 224x224
+    * Scale from 8% to 100%
+    * Aspect ratio from 3/4 to 4/3
+  * Random horizontal flip
+
+* For inference:
+  * Normalization
+  * Scale to 256x256
+  * Center crop to 224x224
+
+# 2. Training
+
+To train a model you need 4 GPUs. 
+
+First, `cd` into this directory and enter the docker container via the following code.
+
 ```
-and to evaluate a pretrained model which matches the experiment file use.
-```bash
-python runner.py app:apps/large_scale/<experiment-file> --gpus 0 1 --data-dir <data-dir> --resume <path-to-pretrained-model> --evaluate
-```
+nvidia-docker run -it --rm --privileged --ipc=host \
+    -v `pwd`:/workspace/rn50 \
+    -v <path to imagenet on your computer>:/data/imagenet \
+    nvcr.io/nvidia/pytorch:19.06-py3
 
-As you may see in the `apps/large_scale` directory, each model below corresponds to exactly one `<experiment-file>`
-(other than the MobileNet and ShuffleNet baselines).
-
-Click on one of the links below (other than the first four, which are baselines, to download a checkpoint).
-
-Table 1:
-
-| Model  | Params | FLOPs | Accuracy (ImageNet) |
-| :-------------: | :-------------: | :-------------: | :-------------: |
-| [MobileNet V1 (x 0.25)](https://arxiv.org/abs/1704.04861)  |  0.5M  | 41M  | 50.6  |
-| [ShuffleNet V2 (x 0.5)](https://arxiv.org/abs/1807.11164)  |  1.4M | 41M  | 60.3 |
-| [MobileNet V1 (x 0.5)](https://arxiv.org/abs/1704.04861)  |  1.3M | 149M  | 63.7 |
-| [ShuffleNet V2 (x 1)](https://arxiv.org/abs/1807.11164)  |  2.3M | 146M  | 69.4 |
-| [MobileNet V1 Random Graph (x 0.225)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/rg_x225.pt)  |  1.2M | 55.7M  | 53.3 |
-| [MobileNet V1 DNW Small (x 0.15)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/dnw_small_x15.pt)  |  0.24M | 22.1M  | 50.3 |
-| [MobileNet V1 DNW Small (x 0.225)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/dnw_small_x225.pt)  |  0.4M | 41.2M  | 59.9 |
-| [MobileNet V1 DNW (x 0.225)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/dnw_x225.pt)  |  1.1M | 42.1M | 60.9 |
-| [MobileNet V1 DNW (x 0.3)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/dnw_x3.pt)  | 1.3M | 66.7M | 65.0 |
-| [MobileNet V1 Random Graph (x 0.49)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/rg_x49.pt)  |  1.8M | 170M  | 64.1 |
-| [MobileNet V1 DNW (x 0.49)](https://prior-datasets.s3.us-east-2.amazonaws.com/dnw/pretrained-models/dnw_x49.pt)  | 1.8M  | 154M  | 70.4 |
-
-This may not be relevant, but you may also add the flag `--fast_eval` to make the model smaller and speed up inference. Adding `--fast_eval` removes the neurons which _die_.
-As a result, the first conv, last linear layer, and all operations throughout have much fewer input and output channels. You may add both
-`--fast_eval` and `--use_dgl` to obtain a model for evaluation that matches the theoretical FLOPs by using a graph implementation via
-[https://www.dgl.ai/](https://www.dgl.ai/). You must then install the version of `dgl` which matches your CUDA and Python version
-(see [this](https://www.dgl.ai/pages/start.html) for more details). For example, we run
-```bash
-pip uninstall dgl
-pip install https://s3.us-east-2.amazonaws.com/dgl.ai/wheels/cuda9.2/dgl-0.3-cp36-cp36m-manylinux1_x86_64.whl
-```
-and finally
-```bash
-python runner.py app:apps/large_scale/<experiment-file> --gpus 0 --data-dir <data-dir> --resume <path-to-pretrained-model> --evaluate --fast_eval --use_dgl --batch_size 256
+cd rn50
 ```
 
-## 1. Parameter Storage and Math Operations
+You may now train your model, which should take about 2 days.
 
-These results are provided in Table 1 and computed using `genutil/model_profiling.py`
+```bash
+bash exp/starter.sh ignorefirst10 <folder-where-you-want-to-save-checkpoints>
+```
 
-For completeness we provide the code here:
+# 3. Testing & Pretrained Model
 
-```python
-from genutil.config import FLAGS
+The model we trained can be downloaded [here](https://drive.google.com/file/d/1PIX1BJX72BIM-t6kHtarK1vdvM4C2T0j/view?usp=sharing).
+Put the model in this directory so it is visible in the docker container.
 
+First, `cd` into this directory and enter the docker container via the following code.
 
-def model_profiling(model):
-    n_macs = 0
-    n_params = 0
+```
+nvidia-docker run -it --rm --privileged --ipc=host \
+    -v `pwd`:/workspace/rn50 \
+    -v <path to imagenet on your computer>:/data/imagenet \
+    nvcr.io/nvidia/pytorch:19.06-py3
 
-    if FLAGS.skip_profiling:
-        return n_macs, n_params
+cd rn50
+```
+Test with the following command, which requires only one GPU:
+```
+bash exp/test.sh ignorefirst10 <path-to-model>
+```
+The script should output the following as one of the last lines, which contains the top-1 accuracy.
 
-    # using n_macs for conv2d as
-    # (ins[1] * outs[1] *
-    #  self.kernel_size[0] * self.kernel_size[1] *
-    #  outs[2] * outs[3] // self.groups) * outs[0]
-    # or, when batch_size = 1
-    # in_channels * out_channels * kernel_size[0] * kernel_size[1] * out_spatial[0] * out_spatial[1] // groups
+```
+Summary Epoch: 0/90;	val.top1 : 75.228	val.top5 : 92.620	val.loss : 1.058
+```
 
-    # conv1 has stride 2. layer 1 has stride 1.
-    spatial = 224 // 2
+Additionally, if you look at the output of the evaluation script, you will see the number of params, FLOPS, and speed documented.
+This is visible right after the words `begining to train`.
+See `image_classification/model_profiling.py` for the standard profiler we use.
 
-    # to compute the flops for conv1 we need to know how many input nodes in layer 1 have an output.
-    # this is the effective number of output channels for conv1
-    layer1_n_macs, layer1_n_params, input_with_output, _ = model.layers[0].profiling(
-        spatial
-    )
+These are
+```
+ params: 2,558,732
+ flops: 515,231,310
+ nanoseconds: 77,699,608 
+```
 
-    conv1_n_macs = (
-        model.conv1.in_channels * input_with_output * 3 * 3 * spatial * spatial
-    )
-    conv1_n_params = model.conv1.in_channels * input_with_output * 3 * 3
+# 4. MicroNet Challenge Score
 
-    n_macs = layer1_n_macs + conv1_n_macs
-    n_params = layer1_n_params + conv1_n_params
+We have computer flops as multiply-adds. We may therefore double it to get an upper bound on multiply + adds.
+Accordingly, our math operations is 1,030,462,620. Our parameters is 2,558,732.
 
-    for i, layer in enumerate(model.layers):
-        if i != 0:
-            spatial = spatial // 2  # stride 2 for all blocks >= 1
-            layer_n_macs, layer_n_params, _, output_with_input = layer.profiling(
-                spatial
-            )
-            n_macs += layer_n_macs
-            n_params += layer_n_params
-
-    # output_with_input is the effective number of output channels from the body of the net.
-
-    # pool
-    pool_n_macs = spatial * spatial * output_with_input
-    n_macs += pool_n_macs
-
-    if getattr(FLAGS, "small", False):
-        linear_n_macs, linear_n_params, _ = model.linear.profiling()
-    else:
-        linear_n_macs = output_with_input * model.linear.out_features
-        linear_n_params = output_with_input * model.linear.out_features
-
-    n_macs += linear_n_macs
-    n_params += linear_n_params
-
-    print(
-        "Pararms: {:,}".format(n_params).rjust(45, " ")
-        + "Macs: {:,}".format(n_macs).rjust(45, " ")
-    )
-
-    return n_macs, n_params
+Therefore, our score is 
+```
+(2,558,732 / 6,900,000) + (1,030,462,620/ 1,170,000,000) = 1.251568
 ```
