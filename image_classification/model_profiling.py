@@ -1,3 +1,5 @@
+# from https://github.com/JiahuiYu/slimmable_networks/blob/master/utils/model_profiling.py
+
 import numpy as np
 import time
 import torch
